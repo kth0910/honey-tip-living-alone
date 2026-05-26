@@ -12,10 +12,12 @@ export function fetchSources() {
   return getJson("/api/sources");
 }
 
-export function fetchDocuments({ query = "", type = "전체" }) {
+export function fetchDocuments({ query = "", type = "전체", sourceId = "", limit = 100 }) {
   const params = new URLSearchParams();
   if (query.trim()) params.set("query", query.trim());
   if (type && type !== "전체") params.set("type", type);
+  if (sourceId) params.set("source_id", sourceId);
+  if (limit) params.set("limit", String(limit));
   return getJson(`/api/documents?${params.toString()}`);
 }
 
