@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import asyncio
 from datetime import datetime
 import re
-from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -24,8 +24,22 @@ class CrawledDocument:
 
 
 DATE_PATTERN = re.compile(r"(20\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})")
+CONSUMER24_VIEW_PATTERN = re.compile(r"selectViewList\('([^']+)'")
 MAX_BACKFILL_PAGES = 20
 REQUEST_DELAY_SECONDS = 1.2
+NOISE_TITLES = {
+    "이전",
+    "다음",
+    "목록",
+    "검색",
+    "상세보기",
+    "바로가기",
+    "오늘 하루열지않기",
+    "오늘 하루 열지않기",
+    "나의사건처리",
+    "판매유형별피해구제건수",
+    "처리결과별피해구제건수",
+}
 
 
 def normalize_space(value: str) -> str:
@@ -40,7 +54,7 @@ def extract_date(text: str) -> str:
     return f"{year}-{int(month):02d}-{int(day):02d}"
 
 
-def with_query_param(url: str, key: str, value: int) -> str:
+def with_query_param(url: str, key: str, value: int | str) -> str:
     parsed = urlparse(url)
     params = dict(parse_qsl(parsed.query, keep_blank_values=True))
     params[key] = str(value)
@@ -52,6 +66,9 @@ def page_url_candidates(source: Source, page: int) -> list[str]:
         return [source.url]
 
     if "consumer.go.kr" in source.url:
+        if "selectInfoRptList.do" in source.url:
+            list_url = with_query_param(source.url, "page", page)
+            return [with_query_param(list_url, "row", 10)]
         return [
             with_query_param(source.url, "pageIndex", page),
             with_query_param(source.url, "page", page),
@@ -80,11 +97,16 @@ def infer_doc_type(source: Source, title: str) -> str:
     return "보도자료"
 
 
+def is_noise_title(title: str) -> bool:
+    title = normalize_space(title)
+    return title in NOISE_TITLES or title.startswith("오늘 하루")
+
+
 def build_document(source: Source, title: str, href: str, row_text: str, base_url: str) -> CrawledDocument | None:
     title = normalize_space(title)
     if len(title) < 6:
         return None
-    if title in {"이전", "다음", "목록", "검색", "상세보기", "바로가기"}:
+    if is_noise_title(title):
         return None
 
     url = urljoin(base_url, href)
@@ -145,6 +167,9 @@ def parse_candidates(
 
 
 def parse_consumer24(html: str, base_url: str, source: Source) -> list[CrawledDocument]:
+    if "selectInfoRptList.do" in source.url:
+        return parse_consumer24_info_reports(html, base_url, source)
+
     return parse_candidates(
         html,
         base_url,
@@ -154,14 +179,96 @@ def parse_consumer24(html: str, base_url: str, source: Source) -> list[CrawledDo
     )
 
 
+def consumer24_detail_url(base_url: str, article_id: str) -> str:
+    detail_path = "/user/ftc/consumer/cnsmrBBS/79/selectInfoRptDetail.do"
+    return f"{urljoin(base_url, detail_path)}?infoId={quote(article_id)}"
+
+
+def extract_consumer24_article_id(value: str) -> str:
+    match = CONSUMER24_VIEW_PATTERN.search(value)
+    return match.group(1) if match else ""
+
+
+def parse_consumer24_info_reports(html: str, base_url: str, source: Source) -> list[CrawledDocument]:
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.select_one("table.tbl.col.data")
+    if not table:
+        return []
+
+    docs: list[CrawledDocument] = []
+    seen: set[str] = set()
+    for row in table.select("tbody tr"):
+        cols = row.find_all("td", recursive=False)
+        if len(cols) < 4:
+            continue
+
+        title_cell = row.select_one("td.title")
+        anchor = title_cell.select_one("a[href]") if title_cell else None
+        if not anchor:
+            continue
+
+        title_spans = [normalize_space(span.get_text(" ", strip=True)) for span in anchor.select("span")]
+        title = next((value for value in title_spans if value and "desc" not in value), "")
+        desc = ""
+        desc_node = anchor.select_one(".desc")
+        if desc_node:
+            desc = normalize_space(desc_node.get_text(" ", strip=True))
+        if not title:
+            title = normalize_space(anchor.get_text(" ", strip=True).replace(desc, ""))
+        if len(title) < 6 or is_noise_title(title):
+            continue
+
+        href = anchor.get("href", "")
+        article_id = extract_consumer24_article_id(href)
+        url = consumer24_detail_url(base_url, article_id) if article_id else urljoin(base_url, href)
+        if url in seen:
+            continue
+
+        provider = normalize_space(cols[2].get_text(" ", strip=True))
+        published_at = extract_date(cols[3].get_text(" ", strip=True))
+        doc_type = "비교정보"
+        tags = [source.name, source.source_type, doc_type]
+        if provider:
+            tags.append(provider)
+        docs.append(
+            CrawledDocument(
+                title=title[:280],
+                url=url,
+                summary=(desc or f"{source.name}에서 수집한 공식 소비자 비교정보입니다. 상세 내용은 원문을 확인하세요.")[:700],
+                doc_type=doc_type,
+                category=source.source_type,
+                tags=",".join(tags),
+                published_at=published_at,
+            )
+        )
+        seen.add(url)
+
+    return docs
+
+
+def is_kca_article_url(url: str) -> bool:
+    if "kca.go.kr" not in url:
+        return False
+    if "/search/" in url or "/odr/" in url or "home/main.do" in url:
+        return False
+    return (
+        "mode=view" in url
+        or "selectBbsNttView.do" in url
+        or "/brd/" in url
+        or "repo/handle" in url
+        or "board" in url
+    )
+
+
 def parse_kca(html: str, base_url: str, source: Source) -> list[CrawledDocument]:
-    return parse_candidates(
+    docs = parse_candidates(
         html,
         base_url,
         source,
         row_selectors=("tbody tr", ".board-list li", ".list li", ".gallery-list li"),
-        link_keywords=("kca.go.kr", "view", "sub.do", "board", "repo/handle"),
+        link_keywords=("kca.go.kr", "view", "board", "repo/handle"),
     )
+    return [doc for doc in docs if is_kca_article_url(doc.url) and not is_noise_title(doc.title)]
 
 
 def parse_ftc(html: str, base_url: str, source: Source) -> list[CrawledDocument]:

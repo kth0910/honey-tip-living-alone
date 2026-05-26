@@ -2,12 +2,13 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.crawler import crawl_all_sources, crawl_source
 from app.database import get_db, init_db
-from app.models import Source
+from app.models import Document, Source
 from app.repository import list_sources, search_documents
 from app.seed import seed_database
 
@@ -89,6 +90,40 @@ def documents(
 def assert_admin_token(token: str | None) -> None:
     if token != settings.crawl_admin_token:
         raise HTTPException(status_code=401, detail="invalid admin token")
+
+
+@app.post("/api/admin/prune")
+def prune_bad_documents(
+    x_crawl_token: Annotated[str | None, Header()] = None,
+    db: Session = Depends(get_db),
+) -> dict[str, int | str]:
+    assert_admin_token(x_crawl_token)
+    bad_titles = [
+        "오늘 하루열지않기",
+        "오늘 하루 열지않기",
+        "나의사건처리",
+        "판매유형별피해구제건수",
+        "처리결과별피해구제건수",
+    ]
+    bad_ids = [
+        doc_id
+        for (doc_id,) in db.query(Document.id)
+        .join(Document.source)
+        .filter(
+            or_(
+                Document.title.in_(bad_titles),
+                Document.title.like("오늘 하루%"),
+                Document.url.like("%/home/main.do?page=%"),
+                Document.url.like("%/odr/%"),
+                Document.url.like("%/search/%"),
+            )
+        )
+        .all()
+    ]
+    if bad_ids:
+        db.query(Document).filter(Document.id.in_(bad_ids)).delete(synchronize_session=False)
+        db.commit()
+    return {"status": "pruned", "deleted": len(bad_ids)}
 
 
 @app.post("/api/admin/crawl")

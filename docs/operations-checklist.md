@@ -90,6 +90,15 @@ Invoke-WebRequest `
 Invoke-WebRequest https://honja-sallim-radar-api.onrender.com/api/documents
 ```
 
+잘못 수집된 메뉴/팝업성 문서가 화면에 보이면 새 배포 후 정리 API를 한 번 실행한다.
+
+```powershell
+Invoke-WebRequest `
+  -Method POST `
+  -Headers @{ "x-crawl-token" = "CRAWL_ADMIN_TOKEN 값" } `
+  "https://honja-sallim-radar-api.onrender.com/api/admin/prune"
+```
+
 주의:
 
 - 백필은 요청 간 대기 시간을 두고 실행한다.

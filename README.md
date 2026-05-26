@@ -84,10 +84,12 @@ GET  /api/sources
 GET  /api/documents?query=노트북&type=비교정보
 POST /api/admin/seed
 POST /api/admin/crawl
+POST /api/admin/prune
 ```
 
 `/api/admin/crawl`은 `x-crawl-token` 헤더가 필요합니다.
 `/api/admin/seed`는 로컬 환경(`APP_ENV=local`)에서는 개발 편의를 위해 토큰 없이 동작하지만, 운영 환경에서는 `x-crawl-token` 헤더가 필요합니다.
+`/api/admin/prune`은 운영 중 잘못 수집된 메뉴/팝업성 문서를 정리하는 관리자용 엔드포인트이며, 운영 환경에서는 반드시 `x-crawl-token` 헤더가 필요합니다.
 
 ## 크롤러 실행
 
@@ -115,6 +117,15 @@ CLI:
 cd backend
 python -m app.worker crawl --seed
 python -m app.worker crawl --seed --backfill --max-pages 5
+```
+
+잘못 수집된 메뉴성 문서를 정리해야 할 때:
+
+```powershell
+Invoke-WebRequest `
+  -Method POST `
+  -Headers @{ "x-crawl-token" = "change-me" } `
+  http://127.0.0.1:8000/api/admin/prune
 ```
 
 ## 클라우드 아키텍처

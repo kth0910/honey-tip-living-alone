@@ -21,13 +21,45 @@ ftc = Source(name="공정거래위원회", url="https://www.ftc.go.kr/www/select
 assert_parser(
     consumer24,
     """
-    <table><tbody><tr>
-      <td><a href="/user/ftc/consumer/cnsmrBBS/79/selectInfoRptView.do?infoId=1">무선청소기 품질 비교정보</a></td>
-      <td>2026.05.21</td>
+    <table class="tbl col data">
+      <caption>비교공감 게시판 - 이미지, 제목/요약, 제공기관, 게시일, 조회수</caption>
+      <tbody>
+        <tr>
+          <td class="img">
+            <a href="javascript:selectViewList('A1081327','view','1','');" title="[비교공감 제2026-7호] 전동승용완구"></a>
+          </td>
+          <td class="title">
+            <div class="titleConts">
+              <a href="javascript:selectViewList('A1081327','view','1','');">
+                <span>[비교공감 제2026-7호] 전동승용완구</span>
+                <span class="desc ellipsisMulti">제품별 주행시간과 안전성을 비교한 자료입니다.</span>
+              </a>
+            </div>
+          </td>
+          <td>한국소비자원</td>
+          <td>2026.05.21</td>
+          <td>816</td>
+        </tr>
+      </tbody>
+    </table>
+    """,
+    "[비교공감 제2026-7호] 전동승용완구",
+)
+docs = parse_board(
+    """
+    <table class="tbl col data"><tbody><tr>
+      <td></td>
+      <td class="title"><a href="javascript:selectViewList('A1081327','view','1','');">
+        <span>[비교공감 제2026-7호] 전동승용완구</span>
+      </a></td>
+      <td>한국소비자원</td><td>2026-05-21</td><td>816</td>
     </tr></tbody></table>
     """,
-    "무선청소기 품질 비교정보",
+    consumer24.url,
+    consumer24,
 )
+assert docs[0].url.endswith("/selectInfoRptDetail.do?infoId=A1081327")
+
 assert_parser(
     kca,
     """
@@ -37,6 +69,17 @@ assert_parser(
     </li></ul>
     """,
     "전기매트 안전주의 안내",
+)
+assert not parse_board(
+    """
+    <div>
+      <a href="/home/main.do?page=2">오늘 하루열지않기</a>
+      <a href="/odr/pg/pi/pgpi001">나의사건처리</a>
+      <a href="/home/sub.do?menukey=4001">판매유형별피해구제건수</a>
+    </div>
+    """,
+    kca.url,
+    kca,
 )
 assert_parser(
     ftc,
@@ -54,7 +97,7 @@ kca_page_4 = page_url_candidates(kca, 4)
 ftc_page_5 = page_url_candidates(ftc, 5)
 
 assert consumer24.url in page_url_candidates(consumer24, 1)
-assert any("pageIndex=3" in url for url in consumer24_page_3)
+assert any("page=3" in url and "row=10" in url for url in consumer24_page_3)
 assert any("page=4" in url for url in kca_page_4)
 assert any("pageIndex=5" in url for url in ftc_page_5)
 
