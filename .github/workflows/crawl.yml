@@ -1,0 +1,18 @@
+name: Crawl consumer archive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "13 21 * * *"
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger crawler
+        run: |
+          curl -X POST "$API_BASE_URL/api/admin/crawl" \
+            -H "x-crawl-token: $CRAWL_ADMIN_TOKEN"
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          CRAWL_ADMIN_TOKEN: ${{ secrets.CRAWL_ADMIN_TOKEN }}

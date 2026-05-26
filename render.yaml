@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: honja-sallim-radar-api
+    runtime: docker
+    plan: free
+    dockerfilePath: backend/Dockerfile
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CRAWL_ADMIN_TOKEN
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false
