@@ -84,6 +84,7 @@ function App() {
   const [sortBy, setSortBy] = React.useState("collected_desc");
   const [documents, setDocuments] = React.useState([]);
   const [sources, setSources] = React.useState([]);
+  const [sourceStatus, setSourceStatus] = React.useState("loading");
   const [selectedId, setSelectedId] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -93,11 +94,18 @@ function App() {
     let ignore = false;
 
     async function loadSources() {
+      setSourceStatus("loading");
       try {
         const data = await fetchSources();
-        if (!ignore) setSources(data);
+        if (!ignore) {
+          setSources(data);
+          setSourceStatus("ready");
+        }
       } catch {
-        if (!ignore) setSources([]);
+        if (!ignore) {
+          setSources([]);
+          setSourceStatus("error");
+        }
       }
     }
 
@@ -396,7 +404,28 @@ function App() {
             <h2 id="sources-title">공식 사이트</h2>
           </div>
           <div className="source-grid">
-            {sources.map((source) => (
+            {sourceStatus === "loading" && (
+              <article className="empty-card source-empty">
+                <FileSearch size={28} aria-hidden="true" />
+                <h3>수집원을 불러오는 중입니다</h3>
+                <p>백엔드의 `/api/sources` 응답을 기다리고 있습니다.</p>
+              </article>
+            )}
+            {sourceStatus === "error" && (
+              <article className="empty-card source-empty">
+                <AlertCircle size={28} aria-hidden="true" />
+                <h3>수집원을 불러오지 못했습니다</h3>
+                <p>Render 백엔드 배포와 `VITE_API_BASE_URL` 또는 기본 API URL을 확인하세요.</p>
+              </article>
+            )}
+            {sourceStatus === "ready" && sources.length === 0 && (
+              <article className="empty-card source-empty">
+                <FileSearch size={28} aria-hidden="true" />
+                <h3>등록된 수집원이 없습니다</h3>
+                <p>백엔드에서 seed를 실행하거나 운영 DB의 `sources` 테이블을 확인하세요.</p>
+              </article>
+            )}
+            {sourceStatus === "ready" && sources.map((source) => (
               <article className="source-card" key={source.id}>
                 <span className="source-tag">{source.crawlInterval}</span>
                 <h3>{source.name}</h3>
