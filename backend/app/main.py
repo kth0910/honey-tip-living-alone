@@ -17,6 +17,7 @@ app = FastAPI(title="혼자살림 레이더 API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origins,
+    allow_origin_regex=settings.allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

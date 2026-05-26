@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./consumer_archive.db"
     crawl_admin_token: str = "change-me"
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    allowed_origin_regex: str = r"https://.*\.vercel\.app"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

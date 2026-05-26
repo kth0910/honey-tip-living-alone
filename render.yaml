@@ -13,3 +13,5 @@ services:
         generateValue: true
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: ALLOWED_ORIGIN_REGEX
+        value: https://.*\.vercel\.app
