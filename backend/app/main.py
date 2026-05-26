@@ -95,6 +95,8 @@ def assert_admin_token(token: str | None) -> None:
 async def crawl(
     x_crawl_token: Annotated[str | None, Header()] = None,
     source_id: int | None = None,
+    backfill: bool = False,
+    max_pages: int = Query(1, ge=1, le=20),
     db: Session = Depends(get_db),
 ) -> dict[str, int | str]:
     assert_admin_token(x_crawl_token)
@@ -102,7 +104,7 @@ async def crawl(
         source = db.get(Source, source_id)
         if not source:
             raise HTTPException(status_code=404, detail="source not found")
-        inserted = await crawl_source(db, source)
+        inserted = await crawl_source(db, source, backfill=backfill, max_pages=max_pages)
     else:
-        inserted = await crawl_all_sources(db)
-    return {"status": "done", "inserted": inserted}
+        inserted = await crawl_all_sources(db, backfill=backfill, max_pages=max_pages)
+    return {"status": "done", "inserted": inserted, "backfill": str(backfill), "maxPages": max_pages}

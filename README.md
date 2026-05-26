@@ -100,11 +100,21 @@ Invoke-WebRequest `
   http://127.0.0.1:8000/api/admin/crawl
 ```
 
+초기 백필은 운영 초기에 한 번만 보수적으로 실행합니다. `max_pages`는 출처별 최대 목록 페이지 수이며 1~20 사이만 허용됩니다.
+
+```powershell
+Invoke-WebRequest `
+  -Method POST `
+  -Headers @{ "x-crawl-token" = "change-me" } `
+  "http://127.0.0.1:8000/api/admin/crawl?backfill=true&max_pages=5"
+```
+
 CLI:
 
 ```powershell
 cd backend
 python -m app.worker crawl --seed
+python -m app.worker crawl --seed --backfill --max-pages 5
 ```
 
 ## 클라우드 아키텍처

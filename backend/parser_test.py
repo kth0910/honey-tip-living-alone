@@ -1,4 +1,4 @@
-from app.crawler import parse_board
+from app.crawler import page_url_candidates, parse_board
 from app.models import Source
 
 
@@ -48,5 +48,14 @@ assert_parser(
     """,
     "구독서비스 소비자 피해 예방 안내",
 )
+
+consumer24_page_3 = page_url_candidates(consumer24, 3)
+kca_page_4 = page_url_candidates(kca, 4)
+ftc_page_5 = page_url_candidates(ftc, 5)
+
+assert consumer24.url in page_url_candidates(consumer24, 1)
+assert any("pageIndex=3" in url for url in consumer24_page_3)
+assert any("page=4" in url for url in kca_page_4)
+assert any("pageIndex=5" in url for url in ftc_page_5)
 
 print("parser tests ok")

@@ -64,6 +64,15 @@ CRAWL_ADMIN_TOKEN=same-secret-as-render
 
 `.github/workflows/crawl.yml`이 하루 1회 크롤러를 호출합니다.
 
+운영 DB를 처음 채울 때는 자동 스케줄과 별도로 백필을 한 번만 수동 실행합니다.
+
+```powershell
+Invoke-WebRequest `
+  -Method POST `
+  -Headers @{ "x-crawl-token" = "same-secret-as-render" } `
+  "https://your-render-api.onrender.com/api/admin/crawl?backfill=true&max_pages=5"
+```
+
 ## 배포 전 체크
 
 - `npm run build` 성공

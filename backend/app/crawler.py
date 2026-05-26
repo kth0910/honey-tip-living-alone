@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+import asyncio
 from datetime import datetime
 import re
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -23,6 +24,8 @@ class CrawledDocument:
 
 
 DATE_PATTERN = re.compile(r"(20\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})")
+MAX_BACKFILL_PAGES = 20
+REQUEST_DELAY_SECONDS = 1.2
 
 
 def normalize_space(value: str) -> str:
@@ -35,6 +38,35 @@ def extract_date(text: str) -> str:
         return ""
     year, month, day = match.groups()
     return f"{year}-{int(month):02d}-{int(day):02d}"
+
+
+def with_query_param(url: str, key: str, value: int) -> str:
+    parsed = urlparse(url)
+    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    params[key] = str(value)
+    return urlunparse(parsed._replace(query=urlencode(params)))
+
+
+def page_url_candidates(source: Source, page: int) -> list[str]:
+    if page <= 1:
+        return [source.url]
+
+    if "consumer.go.kr" in source.url:
+        return [
+            with_query_param(source.url, "pageIndex", page),
+            with_query_param(source.url, "page", page),
+        ]
+    if "kca.go.kr" in source.url:
+        return [
+            with_query_param(source.url, "page", page),
+            with_query_param(source.url, "pageIndex", page),
+        ]
+    if "ftc.go.kr" in source.url:
+        return [
+            with_query_param(source.url, "pageIndex", page),
+            with_query_param(source.url, "page", page),
+        ]
+    return [with_query_param(source.url, "page", page)]
 
 
 def infer_doc_type(source: Source, title: str) -> str:
@@ -158,39 +190,66 @@ def parse_board(html: str, base_url: str, source: Source) -> list[CrawledDocumen
     )
 
 
-async def crawl_source(db: Session, source: Source) -> int:
+def save_crawled_documents(db: Session, source: Source, items: list[CrawledDocument]) -> int:
+    inserted = 0
+    for item in items:
+        db.add(
+            Document(
+                source_id=source.id,
+                title=item.title,
+                summary=item.summary,
+                url=item.url,
+                doc_type=item.doc_type,
+                category=item.category,
+                tags=item.tags,
+                published_at=item.published_at,
+            )
+        )
+        try:
+            db.commit()
+            inserted += 1
+        except IntegrityError:
+            db.rollback()
+    return inserted
+
+
+async def crawl_source(db: Session, source: Source, *, backfill: bool = False, max_pages: int = 1) -> int:
     run = CrawlRun(source_id=source.id, status="running")
     db.add(run)
     db.commit()
     db.refresh(run)
 
     inserted = 0
+    pages_scanned = 0
     try:
+        page_limit = min(max(1, max_pages), MAX_BACKFILL_PAGES) if backfill else 1
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-            response = await client.get(source.url, headers={"User-Agent": "honja-sallim-radar/0.1"})
-            response.raise_for_status()
+            for page in range(1, page_limit + 1):
+                page_items: list[CrawledDocument] = []
+                last_error: Exception | None = None
+                for url in page_url_candidates(source, page):
+                    try:
+                        response = await client.get(url, headers={"User-Agent": "honja-sallim-radar/0.1"})
+                        response.raise_for_status()
+                        page_items = parse_board(response.text, url, source)
+                        if page_items:
+                            break
+                    except Exception as exc:  # noqa: BLE001
+                        last_error = exc
 
-        for item in parse_board(response.text, source.url, source):
-            db.add(
-                Document(
-                    source_id=source.id,
-                    title=item.title,
-                    summary=item.summary,
-                    url=item.url,
-                    doc_type=item.doc_type,
-                    category=item.category,
-                    tags=item.tags,
-                    published_at=item.published_at,
-                )
-            )
-            try:
-                db.commit()
-                inserted += 1
-            except IntegrityError:
-                db.rollback()
+                if not page_items:
+                    if page == 1 and last_error:
+                        raise last_error
+                    break
+
+                pages_scanned += 1
+                inserted += save_crawled_documents(db, source, page_items)
+
+                if page < page_limit:
+                    await asyncio.sleep(REQUEST_DELAY_SECONDS)
 
         run.status = "success"
-        run.message = f"inserted={inserted}"
+        run.message = f"inserted={inserted}; pages={pages_scanned}; backfill={backfill}"
         run.inserted_count = inserted
     except Exception as exc:  # noqa: BLE001
         db.rollback()
@@ -204,8 +263,8 @@ async def crawl_source(db: Session, source: Source) -> int:
     return inserted
 
 
-async def crawl_all_sources(db: Session) -> int:
+async def crawl_all_sources(db: Session, *, backfill: bool = False, max_pages: int = 1) -> int:
     total = 0
     for source in db.query(Source).filter(Source.is_active.is_(True)).all():
-        total += await crawl_source(db, source)
+        total += await crawl_source(db, source, backfill=backfill, max_pages=max_pages)
     return total

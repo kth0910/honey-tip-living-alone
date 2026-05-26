@@ -69,6 +69,34 @@ Repository Settings > Secrets and variables > Actions에 아래 값을 넣는다
 4. Vercel 프론트에서 검색 결과 확인
 5. GitHub Actions `Crawl consumer archive`를 `workflow_dispatch`로 수동 실행해 성공 여부 확인
 
+## 초기 백필 실행
+
+운영 DB를 처음 채울 때만 백필을 수동 실행한다. 매일 자동 실행되는 GitHub Actions는 최근 목록만 수집하도록 둔다.
+
+권장 시작값:
+
+```powershell
+Invoke-WebRequest `
+  -Method POST `
+  -Headers @{ "x-crawl-token" = "CRAWL_ADMIN_TOKEN 값" } `
+  "https://honja-sallim-radar-api.onrender.com/api/admin/crawl?backfill=true&max_pages=5"
+```
+
+운영 확인 후 필요하면 `max_pages=10`까지 늘린다. 최대 허용값은 20이다.
+
+백필 후 확인:
+
+```powershell
+Invoke-WebRequest https://honja-sallim-radar-api.onrender.com/api/documents
+```
+
+주의:
+
+- 백필은 요청 간 대기 시간을 두고 실행한다.
+- 공식 사이트 구조가 맞지 않으면 일부 페이지는 수집되지 않을 수 있다.
+- URL 중복은 DB unique constraint로 건너뛴다.
+- 반복 백필은 공식 사이트에 부담을 줄 수 있으므로 필요할 때만 실행한다.
+
 ## 크롤링 운영 주의
 
 - 운영 전 `docs/source-compliance.md`의 robots.txt와 이용 조건을 다시 확인한다.
