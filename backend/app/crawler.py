@@ -246,6 +246,62 @@ def parse_consumer24_info_reports(html: str, base_url: str, source: Source) -> l
     return docs
 
 
+def parse_kca_smartconsumer_reports(html: str, base_url: str, source: Source) -> list[CrawledDocument]:
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.select_one("table.board.m_board")
+    if not table:
+        return []
+
+    docs: list[CrawledDocument] = []
+    seen: set[str] = set()
+    for row in table.select("tbody tr"):
+        anchor = row.select_one("td.title a[href]")
+        if not anchor:
+            continue
+
+        title = normalize_space(anchor.get_text(" ", strip=True))
+        if len(title) < 6 or is_noise_title(title):
+            continue
+
+        url = urljoin(base_url, anchor.get("href", ""))
+        if url in seen or not is_kca_article_url(url):
+            continue
+
+        category_node = row.select_one("td.b_title2")
+        author_node = row.select_one("td.b_write")
+        date_node = row.select_one("td.b_date")
+        category = normalize_space(category_node.get_text(" ", strip=True)) if category_node else source.source_type
+        author = normalize_space(author_node.get_text(" ", strip=True)) if author_node else ""
+        published_at = (
+            extract_date(date_node.get_text(" ", strip=True))
+            if date_node
+            else extract_date(row.get_text(" ", strip=True))
+        )
+        doc_type = infer_doc_type(source, title)
+        if source.source_type == "comparison" and doc_type == "보도자료":
+            doc_type = "비교정보"
+        summary = f"{source.name}에서 수집한 KCA보고서 {category} 자료입니다. 상세 내용은 원문을 확인하세요."
+        if author:
+            summary = f"{summary} 저자: {author}."
+        tags = [source.name, source.source_type, doc_type, category]
+        if author:
+            tags.append(author)
+        docs.append(
+            CrawledDocument(
+                title=title[:280],
+                url=url,
+                summary=summary[:700],
+                doc_type=doc_type,
+                category=category or source.source_type,
+                tags=",".join(tag for tag in tags if tag),
+                published_at=published_at,
+            )
+        )
+        seen.add(url)
+
+    return docs
+
+
 def is_kca_article_url(url: str) -> bool:
     if "kca.go.kr" not in url:
         return False
@@ -261,6 +317,9 @@ def is_kca_article_url(url: str) -> bool:
 
 
 def parse_kca(html: str, base_url: str, source: Source) -> list[CrawledDocument]:
+    if "smartconsumer/sub.do" in source.url and "menukey=7301" in source.url:
+        return parse_kca_smartconsumer_reports(html, base_url, source)
+
     docs = parse_candidates(
         html,
         base_url,

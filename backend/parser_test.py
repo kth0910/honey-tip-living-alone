@@ -16,6 +16,11 @@ consumer24 = Source(
     source_type="comparison",
 )
 kca = Source(name="한국소비자원", url="https://www.kca.go.kr/home/main.do", source_type="press")
+kca_smart = Source(
+    name="한국소비자원 시험검사",
+    url="https://www.kca.go.kr/smartconsumer/sub.do?menukey=7301&mode=list&cate=00000055",
+    source_type="comparison",
+)
 ftc = Source(name="공정거래위원회", url="https://www.ftc.go.kr/www/selectReportUserList.do?key=10", source_type="press")
 
 assert_parser(
@@ -82,6 +87,26 @@ assert not parse_board(
     kca,
 )
 assert_parser(
+    kca_smart,
+    """
+    <table class="board m_board">
+      <tbody>
+        <tr>
+          <td class="brd_none b_num">510</td>
+          <td class="b_title2">시험검사</td>
+          <td class="title">
+            <a href="?menukey=7301&amp;mode=view&amp;no=1004459116&amp;cate=00000055" class="title">전동 승용완구 품질비교시험 결과보고서</a>
+          </td>
+          <td class="b_write">조수민</td>
+          <td class="b_date">2026-05-21</td>
+          <td>99</td>
+        </tr>
+      </tbody>
+    </table>
+    """,
+    "전동 승용완구 품질비교시험 결과보고서",
+)
+assert_parser(
     ftc,
     """
     <table><tbody><tr>
@@ -94,11 +119,13 @@ assert_parser(
 
 consumer24_page_3 = page_url_candidates(consumer24, 3)
 kca_page_4 = page_url_candidates(kca, 4)
+kca_smart_page_6 = page_url_candidates(kca_smart, 6)
 ftc_page_5 = page_url_candidates(ftc, 5)
 
 assert consumer24.url in page_url_candidates(consumer24, 1)
 assert any("page=3" in url and "row=10" in url for url in consumer24_page_3)
 assert any("page=4" in url for url in kca_page_4)
+assert any("page=6" in url and "cate=00000055" in url for url in kca_smart_page_6)
 assert any("pageIndex=5" in url for url in ftc_page_5)
 
 print("parser tests ok")

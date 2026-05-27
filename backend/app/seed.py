@@ -23,6 +23,12 @@ SOURCE_SEEDS = [
         "crawl_interval": "daily",
     },
     {
+        "name": "한국소비자원 시험검사",
+        "url": "https://www.kca.go.kr/smartconsumer/sub.do?menukey=7301&mode=list&cate=00000055",
+        "source_type": "comparison",
+        "crawl_interval": "daily",
+    },
+    {
         "name": "공정거래위원회",
         "url": "https://www.ftc.go.kr/www/selectReportUserList.do?key=10",
         "source_type": "press",
